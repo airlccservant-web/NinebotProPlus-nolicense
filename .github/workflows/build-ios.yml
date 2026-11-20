@@ -1,0 +1,134 @@
+# Build the patched Ninebot Pro+ (iOS 16.4.1) on a GitHub-hosted macOS
+# runner and produce an unsigned IPA. No Mac, no signing identity,
+# no certificates and no secrets are needed.
+#
+# Trigger: on every push, or manually from the Actions tab
+# (workflow_dispatch). The built IPA is uploaded as a workflow
+# artifact; download it from the completed run and self-sign it
+# on your own device.
+name: Build iOS (unsigned IPA)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build unsigned IPA
+    runs-on: macos-15
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # The 1024 app icon is a binary and cannot be pushed through the
+      # GitHub API. Preferred source: AppIcon1024.png uploaded to the
+      # repo itself via the website (Sources/Assets.xcassets/
+      # AppIcon.appiconset/) — that copy never expires. Fallback: fetch
+      # it from Muse storage (link expires ~2026-11-20 00:03 CST).
+      # Contents.json already references AppIcon1024.png; if neither
+      # source works, strip the filename entry so the build still
+      # succeeds (but then the app has no icon).
+      - name: Fetch app icon (custom)
+        run: |
+          ICON="Sources/Assets.xcassets/AppIcon.appiconset/AppIcon1024.png"
+          if [ -s "$ICON" ]; then
+            echo "icon already in repo: $(wc -c < "$ICON") bytes"
+          elif curl -fsSL "https://muse.ai/files/1428716783660521/2191120571487953/t9tpthrlfsf6xent28e7g93o/AppIcon1024.png" -o "$ICON" && [ -s "$ICON" ]; then
+            echo "icon downloaded: $(wc -c < "$ICON") bytes"
+          else
+            echo "icon download failed; building without icon"
+            rm -f "$ICON"
+            python3 -c "import json; p='Sources/Assets.xcassets/AppIcon.appiconset/Contents.json'; d=json.load(open(p)); d['images']=[i for i in d['images'] if 'filename' not in i]; json.dump(d, open(p,'w'), indent=2)"
+          fi
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # Xcode 16.x targets iOS 16.0 and ships Swift 6.0. Do NOT use
+      # Xcode 26 here: newer SDKs link symbols iOS 16.4.1 does not
+      # provide (that is exactly what killed the original 1.0.1).
+      # Prefer Xcode 16.4: the runner ships the iOS 18.5 simulator
+      # runtime (22F77) but NOT the iOS 18.2 runtime (22C146) that
+      # Xcode 16.2 needs to compile the app-icon asset catalog —
+      # run #3 failed on exactly that ("No simulator runtime
+      # version ... available to use with iphonesimulator SDK
+      # version 22C146").
+      - name: Select Xcode 16.x
+        run: |
+          ls /Applications | grep -i xcode || true
+          if [ -d /Applications/Xcode_16.4.app ]; then
+            sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          else
+            for d in $(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -r); do
+              sudo xcode-select -s "$d/Contents/Developer" && break
+            done
+          fi
+          xcodebuild -version
+          swift --version
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Archive (Release, no signing)
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project "Ninebot Pro+.xcodeproj" \
+            -scheme "Ninebot Pro+" \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "build/Ninebot Pro+.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            2>&1 | tee build.log
+
+      # If the build fails, surface the actual error lines as job
+      # annotations: they are visible on the public run page without
+      # signing in, so the log does not have to be fetched by hand.
+      - name: Show build errors as annotations
+        if: failure()
+        run: |
+          grep -E "error:" build.log | head -40 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          echo "---- tail of build.log ----"
+          tail -30 build.log
+
+      - name: Verify the built app targets iOS 16.0
+        run: |
+          APP="build/Ninebot Pro+.xcarchive/Products/Applications/Ninebot Pro+.app"
+          test -d "$APP" || { echo "Built app not found at $APP"; exit 1; }
+          MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP/Info.plist")
+          test "$MIN_OS" = "16.0" || { echo "MinimumOSVersion is $MIN_OS, expected 16.0"; exit 1; }
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist"
+          test -d "$APP/PlugIns/ScreenCast.appex" || { echo "Broadcast extension missing from $APP/PlugIns"; exit 1; }
+          test -f "$APP/Assets.car" || { echo "Assets.car missing (app icon not compiled)"; exit 1; }
+          echo "Assets.car size: $(stat -f%z "$APP/Assets.car") bytes"
+          ls "$APP/PlugIns/"
+
+      - name: Package unsigned IPA
+        run: |
+          APP="build/Ninebot Pro+.xcarchive/Products/Applications/Ninebot Pro+.app"
+          # 版本号从编出来的 App 里读，project.yml 一改就自动跟上，
+          # 以后升版再也不用改这个文件。
+          VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
+          IPA="NinebotProPlus-${VER}-ios16-unsigned.ipa"
+          rm -rf Payload "$IPA"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -r -y "$IPA" Payload
+          rm -rf Payload
+          ls -lh "$IPA"
+          shasum -a 256 "$IPA" | tee SHA256SUMS.txt
+          unzip -l "$IPA"
+          echo "IPA_NAME=$IPA" >> "$GITHUB_ENV"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.IPA_NAME }}-ipa
+          path: |
+            ${{ env.IPA_NAME }}
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
