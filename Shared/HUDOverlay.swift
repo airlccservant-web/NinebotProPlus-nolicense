@@ -623,22 +623,21 @@ enum HUDRenderer {
         }
 
         let contentWidth = measuredRows.map { $0.width }.max() ?? 0
-        // 朋友版 105：有 BMS 面板时，胶囊宽度跟它对齐（281，左沿 375），上下两块一样宽。
+        // 朋友版 107：胶囊改跟用户主应用 1.3.19 一样——强制 204 宽、右对齐 X=632，
+        // 不再跟 BMS 面板对齐（375/281）。106 的对齐在朋友仪表上位置不对，先按主应用的位置试。
         let bmsPanelW = CGFloat(281) * sx
         let bmsPanelX = CGFloat(375) * sx
-        var pillW = contentWidth + padX * 2
-        if !bmsItems.isEmpty {
-            pillW = max(pillW, bmsPanelW)
-        }
+        var pillW = CGFloat(204) * sx
+        _ = contentWidth
         let rowCount = measuredRows.count
         let pillH = padY * 2 + rowHeight * CGFloat(rowCount) + rowGap * CGFloat(max(0, rowCount - 1))
 
-        // 胶囊锚点按设置来（y 朝上坐标系）。有 BMS 面板且在右侧时，左沿跟 BMS 面板对齐。
+        // 胶囊锚点按设置来（y 朝上坐标系）。朋友版 107：右对齐 X=632，跟主应用 1.3.19 一致。
         let pillX: CGFloat
         let pillY: CGFloat
         switch settings.position {
         case .bottomRight:
-            pillX = (!bmsItems.isEmpty && pillW <= bmsPanelW + 0.5) ? bmsPanelX : (refWidth - marginRightRef) * sx - pillW
+            pillX = (refWidth - marginRightRef) * sx - pillW
             pillY = marginBottomRef * sy
         case .bottomLeft:
             pillX = marginLeftRef * sx
@@ -647,7 +646,7 @@ enum HUDRenderer {
             pillX = marginLeftRef * sx
             pillY = h - marginTopRef * sy - pillH
         case .topRight:
-            pillX = (!bmsItems.isEmpty && pillW <= bmsPanelW + 0.5) ? bmsPanelX : (refWidth - marginRightRef) * sx - pillW
+            pillX = (refWidth - marginRightRef) * sx - pillW
             pillY = h - marginTopRef * sy - pillH
         }
 
@@ -709,21 +708,15 @@ enum HUDRenderer {
         }
         } // if !measuredRows.isEmpty
 
-        // ---- ANT BMS 单独面板（朋友版 105）：右上角车辆自带表盘下面，宽度跟它对齐 ----
-        // 上下间隙跟底下胶囊一致：面板在表盘底沿和胶囊顶之间垂直居中，两边间隙相等。
+        // ---- ANT BMS 单独面板（朋友版 106）：右上角车辆自带表盘下面，宽度跟它对齐 ----
+        // 顶边固定 222（表盘底沿 214 下面 8px），不管胶囊显不显示都贴在表盘正下方。
+        // 105 的居中算法（表盘底沿和胶囊顶之间垂直居中）会把面板推到屏幕中间，已删掉。
         // 位置是按仪表照片量的（848×480 参考系）：表盘左沿 375、宽 281、底沿 214。
         if !bmsItems.isEmpty {
             let bmsLeft = bmsPanelX
             let bmsW = bmsPanelW
             let bmsH = padY * 2 + rowHeight * 3 + rowGap * 2
-            let bmsTopFromTop: CGFloat
-            if !measuredRows.isEmpty {
-                let pBottom = CGFloat(214) * sy
-                let capsuleTop = h - (pillY + pillH)
-                bmsTopFromTop = pBottom + (capsuleTop - pBottom - bmsH) / 2
-            } else {
-                bmsTopFromTop = CGFloat(222) * sy
-            }
+            let bmsTopFromTop: CGFloat = CGFloat(222) * sy
             let bmsY = h - bmsTopFromTop - bmsH
             let bmsPanel = CGRect(x: bmsLeft, y: bmsY, width: bmsW, height: bmsH)
             context.setShadow(offset: .zero, blur: 0, color: nil)
