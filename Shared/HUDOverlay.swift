@@ -625,8 +625,6 @@ enum HUDRenderer {
         let contentWidth = measuredRows.map { $0.width }.max() ?? 0
         // 朋友版 107：胶囊改跟用户主应用 1.3.19 一样——强制 204 宽、右对齐 X=632，
         // 不再跟 BMS 面板对齐（375/281）。106 的对齐在朋友仪表上位置不对，先按主应用的位置试。
-        let bmsPanelW = CGFloat(281) * sx
-        let bmsPanelX = CGFloat(375) * sx
         var pillW = CGFloat(204) * sx
         _ = contentWidth
         let rowCount = measuredRows.count
@@ -708,13 +706,13 @@ enum HUDRenderer {
         }
         } // if !measuredRows.isEmpty
 
-        // ---- ANT BMS 单独面板（朋友版 106）：右上角车辆自带表盘下面，宽度跟它对齐 ----
-        // 顶边固定 222（表盘底沿 214 下面 8px），不管胶囊显不显示都贴在表盘正下方。
-        // 105 的居中算法（表盘底沿和胶囊顶之间垂直居中）会把面板推到屏幕中间，已删掉。
-        // 位置是按仪表照片量的（848×480 参考系）：表盘左沿 375、宽 281、底沿 214。
+        // ---- ANT BMS 单独面板（朋友版 107）：改跟主应用 1.3.19 一样——204 宽、右对齐 X=632。
+        // 106 按“表盘左沿 375、宽 281”量的位置在朋友仪表上不对（跟用户老虎机不动是同一个问题）；
+        // 用户主应用的翻页时钟/胶囊都是 204 宽、右对齐 X=632，朋友的 BMS 面板也按这个位置放。
+        // 顶边仍固定 222（表盘底沿 214 下面 8px）。
         if !bmsItems.isEmpty {
-            let bmsLeft = bmsPanelX
-            let bmsW = bmsPanelW
+            let bmsLeft = (refWidth - marginRightRef - CGFloat(204)) * sx
+            let bmsW = CGFloat(204) * sx
             let bmsH = padY * 2 + rowHeight * 3 + rowGap * 2
             let bmsTopFromTop: CGFloat = CGFloat(222) * sy
             let bmsY = h - bmsTopFromTop - bmsH
