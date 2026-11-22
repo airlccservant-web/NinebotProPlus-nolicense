@@ -375,6 +375,10 @@ enum HUDRenderer {
     private static let panelAlpha: CGFloat = 0.45
     private static let panelBorderAlpha: CGFloat = 0.35
     private static let panelCornerRef: CGFloat = 12
+    // 1.2.10：胶囊和 BMS 面板同宽 260（原来 204）。朋友版胶囊第一行带时间
+    // "11月22日 周日 21:11"，204 装不下、时间和电池图标超出右边框；BMS 两列
+    // "电量 85.0%" 也超宽（约 109 > 列宽 90）。右沿仍 836（X=576）。
+    private static let pillWidthRef: CGFloat = 260
 
     private static let lock = NSLock()
     private static var cachedKey = ""
@@ -623,9 +627,10 @@ enum HUDRenderer {
         }
 
         let contentWidth = measuredRows.map { $0.width }.max() ?? 0
-        // 朋友版 107：胶囊改跟用户主应用 1.3.19 一样——强制 204 宽、右对齐 X=632，
-        // 不再跟 BMS 面板对齐（375/281）。106 的对齐在朋友仪表上位置不对，先按主应用的位置试。
-        var pillW = CGFloat(204) * sx
+        // 朋友版 1.2.10：胶囊改 260 宽、右对齐 X=576（右沿仍 836）。
+        // 107 的 204 装不下第一行 "11月22日 周日 21:11"（带时间 HH:mm），
+        // 时间和电池图标超出右边框；260 按中字量过，内容宽约 210 + 两边各 12 留白。
+        var pillW = pillWidthRef * sx
         _ = contentWidth
         let rowCount = measuredRows.count
         let pillH = padY * 2 + rowHeight * CGFloat(rowCount) + rowGap * CGFloat(max(0, rowCount - 1))
@@ -706,15 +711,16 @@ enum HUDRenderer {
         }
         } // if !measuredRows.isEmpty
 
-        // ---- ANT BMS 单独面板（朋友版 107）：改跟主应用 1.3.19 一样——204 宽、右对齐 X=632。
-        // 106 按“表盘左沿 375、宽 281”量的位置在朋友仪表上不对（跟用户老虎机不动是同一个问题）；
-        // 用户主应用的翻页时钟/胶囊都是 204 宽、右对齐 X=632，朋友的 BMS 面板也按这个位置放。
-        // 顶边仍固定 222（表盘底沿 214 下面 8px）。
+        // ---- ANT BMS 单独面板（朋友版 1.2.10）：跟胶囊同宽 260、右对齐 X=576（右沿仍 836）。
+        // 107 的 204 两列装不下 "电量 85.0%"（约 109 > 列宽 90），1.2.10 跟胶囊一起加宽到 260。
+        // 顶边从 222 下移到 280：222 时卡片顶部被车自带表盘底沿挡住（表盘底沿实际约 235-240，
+        // 不是注释里写的 214）；280 在表盘下面留约 40px，底边（中字约 372）离胶囊顶（403）约 31px，
+        // 大字时底边约 383、胶囊顶约 396，仍有约 13px，不会碰到胶囊。
         if !bmsItems.isEmpty {
-            let bmsLeft = (refWidth - marginRightRef - CGFloat(204)) * sx
-            let bmsW = CGFloat(204) * sx
+            let bmsLeft = (refWidth - marginRightRef - pillWidthRef) * sx
+            let bmsW = pillWidthRef * sx
             let bmsH = padY * 2 + rowHeight * 3 + rowGap * 2
-            let bmsTopFromTop: CGFloat = CGFloat(222) * sy
+            let bmsTopFromTop: CGFloat = CGFloat(280) * sy
             let bmsY = h - bmsTopFromTop - bmsH
             let bmsPanel = CGRect(x: bmsLeft, y: bmsY, width: bmsW, height: bmsH)
             context.setShadow(offset: .zero, blur: 0, color: nil)
