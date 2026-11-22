@@ -19,6 +19,7 @@ struct MainView: View {
     @StateObject private var engine = CastEngine()
     @StateObject private var antbms = ANTBMS.shared
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var scenePhase
 
     // 授权门（App 持有）：授权卡片显示状态、更换授权码用。
     @ObservedObject var licenseGate: LicenseGate
@@ -41,6 +42,7 @@ struct MainView: View {
     @AppStorage("nbc.hud.position") private var hudPosition = 0 // 0 右下 1 左下 2 左上 3 右上
     @AppStorage("nbc.hud.fontSize") private var hudFontSize = 1 // 0 小 1 中 2 大
     @AppStorage("nbc.keepAlive") private var keepAlive = true
+    @AppStorage("nbc.keepScreenOnWhileCasting") private var keepScreenOnWhileCasting = true
     @State private var gopIndex = 25            // 关键帧间隔（帧）
     @State private var fpsIndex = 20
     @State private var bitrateIndex = 1200      // kbps
@@ -118,6 +120,7 @@ struct MainView: View {
             if host.isEmpty { host = LanScanner.gatewayGuess() ?? "" }
             applyQuality(qualityIndex)
             postHUDSettings()
+            updateIdleTimer()
             diagText = Diag.tail(16)
             Diag.log("MainView 出现，版本 \(AppVersion.display)，IP=\(host.isEmpty ? "未填" : host)")
         }
@@ -161,6 +164,10 @@ struct MainView: View {
         .onChange(of: cameraPositionIndex) { _ in
             if sourceIndex == 3 { applySource() }
         }
+        .onChange(of: engine.isRunning) { _ in updateIdleTimer() }
+        .onChange(of: keepScreenOnWhileCasting) { _ in updateIdleTimer() }
+        .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in updateIdleTimer() }
+        .onChange(of: scenePhase) { phase in if phase == .active { updateIdleTimer() } }
     }
 
     // MARK: - 背景
@@ -586,6 +593,12 @@ struct MainView: View {
         HUDSettingsRelay.update(hudSettings)
     }
 
+    /// 投屏/镜像进行中且“投屏时屏幕常亮”开着时，禁止自动锁屏；否则恢复系统默认。
+    /// 镜像进行中靠 UIScreen.isCaptured 判断（广播扩展是独立进程、无 App Groups、不回传状态）。
+    private func updateIdleTimer() {
+        UIApplication.shared.isIdleTimerDisabled = keepScreenOnWhileCasting && (engine.isRunning || UIScreen.main.isCaptured)
+    }
+
     private var hudCard: some View {
         card("HUD 显示", icon: "gauge") {
             Toggle("日期时间", isOn: $hudShowDate)
@@ -821,6 +834,12 @@ struct MainView: View {
                     }
                 }
             Text("开着时 App 退后台也不停：BMS 继续轮询、接力继续发；关了只在投屏时保活")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+
+            Toggle("投屏时屏幕常亮", isOn: $keepScreenOnWhileCasting)
+                .font(.subheadline)
+            Text("开着时投屏或镜像进行中屏幕不自动熄灭，防止锁屏断开；关了按系统设置自动锁屏")
                 .font(.caption2)
                 .foregroundColor(.secondary)
 
