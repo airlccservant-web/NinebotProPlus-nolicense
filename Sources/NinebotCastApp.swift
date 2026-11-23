@@ -46,17 +46,10 @@ struct NinebotProPlusApp: App {
     }
     var body: some Scene {
         WindowGroup {
-            Group {
-                if licenseGate.isActivated {
-                    MainView(licenseGate: licenseGate)
-                } else {
-                    LicenseView(gate: licenseGate)
-                }
-            }
-            .onAppear { licenseGate.refresh() }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                licenseGate.refresh()
-            }
+            // 本构建已移除授权码校验：不再判断 licenseGate.isActivated，
+            // 也不再有任何激活页，启动即进主界面。
+            MainView(licenseGate: licenseGate)
+                .onAppear { licenseGate.refresh() }
         }
     }
 }

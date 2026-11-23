@@ -10,14 +10,10 @@ final class LicenseGate: ObservableObject {
     init() { refresh() }
 
     func refresh() {
-        switch LicenseManager.currentStatus() {
-        case .valid(let expiry):
-            isActivated = true
-            expiryText = expiry.map { LicenseManager.displayDate($0) }
-        case .invalid, .expired:
-            isActivated = false
-            expiryText = nil
-        }
+        // 本构建已移除授权码校验：无论钥匙串里有没有码、码是否过期，
+        // 一律视为已激活，直接进主界面。
+        isActivated = true
+        expiryText = nil
     }
 }
 

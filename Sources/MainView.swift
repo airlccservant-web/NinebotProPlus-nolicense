@@ -91,7 +91,6 @@ struct MainView: View {
                     mirrorCard
                     hudCard
                     bmsCard
-                    licenseCard
                     metricsCard
                     diagCard
                 }
@@ -102,18 +101,6 @@ struct MainView: View {
         }
         .overlay(alignment: .bottom) { actionBar }
         .sheet(isPresented: $showImagePreview) { imagePreviewSheet }
-        .sheet(isPresented: $showLicenseSheet) {
-            NavigationStack {
-                LicenseView(gate: licenseGate)
-                    .navigationTitle("授权码")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("完成") { showLicenseSheet = false }
-                        }
-                    }
-            }
-        }
         .sheet(isPresented: $showTools) { toolsSheet }
         .onAppear {
             localIP = LanScanner.localIPv4() ?? "未连 Wi-Fi"
